@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: quantum-safe-explorer
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    branch: main
+    repo: https://github.com/Start-Impulse/PQMongo # Placeholder
+    envVars:
+      - key: NEXT_PUBLIC_PQC_ENABLED
+        value: "true"
+      - key: MONGODB_URI
+        sync: false
+
+  # PQC Proxy Sidecar (Simulated/Placeholder for OQS-OpenSSL)
+  - type: pserv
+    name: pqc-proxy-layer
+    env: docker
+    dockerfilePath: ./Dockerfile.proxy
+    plan: free
+    envVars:
+      - key: PROXY_PORT
+        value: "4433"
