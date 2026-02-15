@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ShieldCheck, AlertTriangle } from "lucide-react"
 
-export const columns: ColumnDef<PaymentDocument>[] = [
+export const getColumns = (showCiphertext: boolean): ColumnDef<any>[] => [
     {
         id: "select",
         header: ({ table }) => (
@@ -29,7 +29,13 @@ export const columns: ColumnDef<PaymentDocument>[] = [
     {
         accessorKey: "transactionId",
         header: "Transaction ID",
-        cell: ({ row }) => <div className="font-mono">{row.getValue("transactionId")}</div>,
+        cell: ({ row }) => {
+            const doc = row.original as any
+            if (showCiphertext && doc.ciphertext) {
+                return <div className="font-mono text-[10px] text-muted-foreground truncate w-[100px]" title={doc.ciphertext}>{doc.ciphertext}</div>
+            }
+            return <div className="font-mono">{row.getValue("transactionId")}</div>
+        },
     },
     {
         accessorKey: "status",
@@ -50,6 +56,10 @@ export const columns: ColumnDef<PaymentDocument>[] = [
         accessorKey: "amount",
         header: () => <div className="text-right">Amount</div>,
         cell: ({ row }) => {
+            const doc = row.original as any
+            if (showCiphertext && doc.ciphertext) {
+                return <div className="text-right font-mono text-[10px] text-muted-foreground truncate" title={doc.ciphertext}>[ENC]</div>
+            }
             const amount = parseFloat(row.getValue("amount"))
             const formatted = new Intl.NumberFormat("en-US", {
                 style: "currency",
@@ -64,7 +74,7 @@ export const columns: ColumnDef<PaymentDocument>[] = [
         header: "Encryption",
         cell: ({ row }) => {
             const method = row.getValue("encryptionMethod") as string
-            const isQuantum = row.original.quantumSafe
+            const isQuantum = (row.original as any).quantumSafe
             return (
                 <div className="flex items-center space-x-2">
                     {isQuantum ? <ShieldCheck className="h-4 w-4 text-green-500" /> : <AlertTriangle className="h-4 w-4 text-yellow-500" />}
@@ -77,7 +87,8 @@ export const columns: ColumnDef<PaymentDocument>[] = [
         accessorKey: "timestamp",
         header: "Timestamp",
         cell: ({ row }) => {
-            return <div className="text-muted-foreground text-xs">{new Date(row.getValue("timestamp")).toLocaleString()}</div>
+            const date = new Date(row.getValue("timestamp"))
+            return <div className="text-muted-foreground text-xs" suppressHydrationWarning>{date.toLocaleString()}</div>
         }
     }
 ]

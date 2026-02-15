@@ -5,19 +5,21 @@ services:
     dockerfilePath: ./Dockerfile
     plan: free
     branch: main
-    repo: https://github.com/Start-Impulse/PQMongo # Placeholder
     envVars:
       - key: NEXT_PUBLIC_PQC_ENABLED
         value: "true"
+      - key: PQC_LEVEL
+        value: "FIPS-203-ML-KEM-1024"
       - key: MONGODB_URI
         sync: false
-
-  # PQC Proxy Sidecar (Simulated/Placeholder for OQS-OpenSSL)
-  - type: pserv
-    name: pqc-proxy-layer
-    env: docker
-    dockerfilePath: ./Dockerfile.proxy
-    plan: free
-    envVars:
-      - key: PROXY_PORT
-        value: "4433"
+      - key: NEXTAUTH_SECRET
+        generateValue: true
+      - key: NEXTAUTH_URL
+        fromService:
+          name: quantum-safe-explorer
+          type: web
+          property: host
+      - key: AUTH_GITHUB_ID
+        sync: false
+      - key: AUTH_GITHUB_SECRET
+        sync: false

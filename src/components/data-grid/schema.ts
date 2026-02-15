@@ -7,6 +7,12 @@ export type PaymentDocument = {
     encryptionMethod: "AES-256-GCM" | "ML-KEM-1024 + AES-256"
     quantumSafe: boolean
     timestamp: string
+    // Real PQC Metadata
+    ciphertext?: string
+    encapsulation?: string
+    iv?: string
+    authTag?: string
+    latencyMs?: number
 }
 
 export const mockData: PaymentDocument[] = Array.from({ length: 50 }, (_, i) => ({

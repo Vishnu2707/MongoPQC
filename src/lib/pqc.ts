@@ -1,25 +1,88 @@
-export type PQCMetrics = {
-    handshake_latency_ms: number
-    packet_size_bytes: number
-    throughput_kbps: number
-    quantum_confidence_score: number
-    encryption_status: "ML-KEM-1024" | "AES-256-GCM"
+import { MlKem1024 } from 'mlkem';
+import * as crypto from 'crypto';
+import { pqcLatencyGauge, pqcKeysCounter } from '@/lib/metrics';
+
+/**
+ * Hybrid Encryption Engine (Quantum-Safe + Classical)
+ * Standards: NIST FIPS 203 (ML-KEM) + AES-256-GCM (FIPS 197)
+ */
+
+export interface EncryptedPayload {
+    ciphertext: string; // Base64 AES ciphertext
+    encapsulation: string; // Base64 ML-KEM encapsulation (ciphertext of the AES key)
+    iv: string; // Base64 Initialization Vector
+    authTag: string; // Base64 GCM Auth Tag
+    latencyMs: number; // Real measured latency
 }
 
-export function getSimulatedPQCMetrics(): PQCMetrics {
-    // Simulate ML-KEM-1024 characteristics
-    // ML-KEM-1024 (Kyber-1024) has ~1568 bytes public key, ~1568 bytes ciphertext.
-    // Latency is higher than ECDH but very fast (~0.1-0.2ms CPU, but network overhead adds up).
-    // We simulate a realistic "over the wirte" handshake latency including RTT.
+/**
+ * Encrypts a document using Hybrid ML-KEM-1024 + AES-256-GCM
+ */
+export async function encryptHybrid(data: string, publicKeyBytes: Uint8Array): Promise<EncryptedPayload> {
+    const start = performance.now();
 
-    const baseLatency = 15; // ms
-    const jitter = Math.random() * 5;
+    // 1. ML-KEM Encapsulation (Generates Shared Secret + Ciphertext)
+    const sender = new MlKem1024();
+    const [encapsulation, sharedSecret] = await sender.encap(publicKeyBytes);
+
+    // 2. AES-256-GCM Encryption
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', sharedSecret, iv);
+
+    let ciphertext = cipher.update(data, 'utf8', 'base64');
+    ciphertext += cipher.final('base64');
+    const authTag = cipher.getAuthTag().toString('base64');
+
+    const end = performance.now();
+    const latency = end - start;
+
+    // Update Prometheus metrics
+    if (pqcLatencyGauge) pqcLatencyGauge.set(latency / 1000); // Scale to seconds
 
     return {
-        handshake_latency_ms: parseFloat((baseLatency + jitter).toFixed(2)),
-        packet_size_bytes: 3136 + Math.floor(Math.random() * 100), // ~3KB overhead
-        throughput_kbps: 1250 + Math.floor(Math.random() * 500),
-        quantum_confidence_score: 98.5, // High confidence
-        encryption_status: "ML-KEM-1024"
-    }
+        ciphertext,
+        encapsulation: Buffer.from(encapsulation).toString('base64'),
+        iv: iv.toString('base64'),
+        authTag,
+        latencyMs: latency
+    };
+}
+
+/**
+ * Decrypts a document using Hybrid ML-KEM-1024 + AES-256-GCM
+ */
+export async function decryptHybrid(
+    payload: EncryptedPayload,
+    privateKeyBytes: Uint8Array
+): Promise<string> {
+    // 1. ML-KEM Decapsulation (Recover the AES Shared Secret)
+    const encapsulationBuffer = Buffer.from(payload.encapsulation, 'base64');
+    const recipient = new MlKem1024();
+    const sharedSecret = await recipient.decap(encapsulationBuffer, privateKeyBytes);
+
+    // 2. AES-256-GCM Decryption
+    const decipher = crypto.createDecipheriv(
+        'aes-256-gcm',
+        sharedSecret,
+        Buffer.from(payload.iv, 'base64')
+    );
+
+    decipher.setAuthTag(Buffer.from(payload.authTag, 'base64'));
+
+    let decrypted = decipher.update(payload.ciphertext, 'base64', 'utf8');
+    decrypted += decipher.final('utf8');
+
+    return decrypted;
+}
+
+/**
+ * Generates an ML-KEM-1024 keypair
+ */
+export async function generatePQCKeypair() {
+    const recipient = new MlKem1024();
+    const [publicKey, privateKey] = await recipient.generateKeyPair();
+
+    if (pqcKeysCounter) pqcKeysCounter.inc();
+
+    return { publicKey, privateKey };
 }
